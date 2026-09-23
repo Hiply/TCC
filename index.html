@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#07111f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>TCC Turma 3B</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Orbitron:wght@500;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="scanlines"></div>
+  <div id="toastStack" class="toast-stack"></div>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-kicker">Inspirado em Solo Leveling</span>
+        <h1>TCC TURMA 3B</h1>
+      </div>
+      <div class="top-actions"><span id="connectionStatus" class="status-pill"><i></i> Sistema Pronto </span><span
+          id="syncPill" class="status-pill sync-pill cloud-only">SEM NUVEM</span><button id="cloudBtn"
+          class="ghost-btn cloud-only">☁ CONTA</button><button id="difficultyBtn" class="ghost-btn"
+          title="Alternar dificuldade">MODO: FIEL AO ANIME</button><button id="soundBtn" class="icon-btn"
+          title="Som do sistema">◈</button><button id="resetBtn" class="ghost-btn">RESETAR</button></div>
+    </header>
+
+    <div id="authModal" class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-head">
+          <h2>CONTA DO SISTEMA</h2><button id="authCloseBtn" class="icon-btn">✕</button>
+        </div>
+        <p class="muted-note">Crie uma conta gratuita para sincronizar seu progresso entre PC e celular.</p>
+        <input id="authEmail" type="email" placeholder="email@exemplo.com" class="sys-input" />
+        <input id="authPassword" type="password" placeholder="Senha (mín. 6 caracteres)" class="sys-input" />
+        <div class="modal-actions">
+          <button id="authSignInBtn" class="primary-btn">ENTRAR</button>
+          <button id="authSignUpBtn" class="ghost-btn">CRIAR CONTA</button>
+        </div>
+        <p id="authMsg" class="muted-note"></p>
+      </div>
+    </div>
+
+    <div id="penaltyBanner" class="penalty-banner"></div>
+
+    <nav class="nav-tabs" aria-label="Navegação do sistema">
+      <button class="tab active" data-tab="overview">VISÃO GERAL</button>
+      <button class="tab" data-tab="status">STATUS</button>
+      <button class="tab" data-tab="quests">MISSÕES</button>
+      <button class="tab" data-tab="achievements">CONQUISTAS</button>
+      <button class="tab" data-tab="history">HISTÓRICO</button>
+    </nav>
+
+    <section id="tab-overview" class="tab-content active">
+      <section class="hero-grid">
+        <article class="panel player-card glow">
+          <div class="panel-label">STATUS DO JOGADOR</div>
+          <div class="player-main">
+            <div class="rank-badge"><span id="levelBadge">01</span><small>LVL</small></div>
+            <div class="player-info"><span class="muted">DESPERTAR DO JOGADOR</span>
+              <h2 id="playerName">JOGADOR DESPERTADO</h2>
+              <div class="class-line"><span id="className">E-RANK</span><span>•</span><span id="xpLabel">0 / 100
+                  XP</span></div>
+            </div>
+          </div>
+          <div class="xp-track">
+            <div id="xpBar" class="xp-fill"></div>
+          </div>
+          <div class="xp-meta"><span>XP PARA O PRÓXIMO NÍVEL</span><b id="xpPercent">0%</b></div>
+          <div class="stat-grid mini">
+            <div class="stat"><span>STR</span><b id="strStat">10</b><button data-stat="str">+</button></div>
+            <div class="stat"><span>VIT</span><b id="vitStat">10</b><button data-stat="vit">+</button></div>
+            <div class="stat"><span>AGI</span><b id="agiStat">10</b><button data-stat="agi">+</button></div>
+            <div class="stat"><span>END</span><b id="endStat">10</b><button data-stat="end">+</button></div>
+          </div>
+          <div class="points-row"><span>PONTOS DE ATRIBUTOS NÃO GASTOS</span><strong id="statPoints">0</strong></div>
+          <div class="panel-label" style="margin-top:16px">ESCALADA DE RANKS</div>
+          <div id="rankLadder" class="rank-ladder"></div>
+        </article>
+
+        <article class="panel mission-summary glow">
+          <div class="panel-label">QUEST DIÁRIA DO SISTEMA</div>
+          <div class="quest-head">
+            <div><span class="mission-kicker">PROTOCOLO OBRIGATÓRIO</span>
+              <h2>CORPO DE FERRO</h2>
+              <p>Flexões, abdominais, agachamentos e corrida. Ignorar gera penalidade do Sistema.</p>
+            </div>
+            <div class="reward-chip" id="dailyQuestStatus">EM ANDAMENTO</div>
+          </div>
+          <div id="dailyQuest" class="daily-quest-grid"></div>
+          <div class="mission-footer">
+            <div><span id="missionStatus" class="cyan">PRONTO PARA COMEÇAR</span><small id="streakText">SEQUÊNCIA: 0
+                DIAS</small></div><button id="startBtn" class="primary-btn">COMEÇAR MONITORAMENTO</button>
+          </div>
+          <div class="quest-rewards">
+            <div><span>PORTAIS LIMPOS</span><b id="gatesCleared">0</b></div>
+            <div><span>PROVAÇÃO ATIVA</span><b id="trialStatusMini">—</b></div>
+            <div><span>RECOMPENSA</span><b>XP variável</b></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel map-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-label">CAMPO DE TREINO</div>
+              <h2>ROTA EM TEMPO REAL + PORTAIS</h2>
+            </div>
+            <div id="liveIndicator" class="live-indicator"><span class="pulse"></span> DESCANSO</div>
+          </div>
+          <div id="map"></div>
+          <div class="map-toolbar"><button id="centerBtn" class="tool-btn">FOCAR NO JOGADOR</button><button
+              id="clearRouteBtn" class="tool-btn">LIMPAR ROTA DA SESSÃO</button></div>
+          <div class="map-stats">
+            <div><span>DISTÂNCIA</span><b id="mapDistance">0.00 km</b></div>
+            <div><span>RITMO</span><b id="pace">—</b></div>
+            <div><span>DECORRIDO</span><b id="elapsed">00:00</b></div>
+            <div><span>PONTOS GPS</span><b id="points">0</b></div>
+          </div>
+        </article>
+        <aside class="side-column">
+          <article class="panel quick-panel">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-label">PROGRESSO DO JOGADOR</div>
+                <h2>MÉTRICA PRINCIPAL</h2>
+              </div>
+            </div>
+            <div class="metric-list">
+              <div><span>TOTAL DE DISTÂNCIA</span><b id="totalDistance">0.00 km</b></div>
+              <div><span>DIAS DE TREINO</span><b id="trainingDays">0</b></div>
+              <div><span>MAIOR SEQUÊNCIA</span><b id="longestRun">0.00 km</b></div>
+              <div><span>TOTAL DE XP</span><b id="totalXp">0 XP</b></div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-label">PROVAÇÃO DE ASCENSÃO</div>
+                <h2>HYPER DESAFIO DE RANK</h2>
+              </div>
+            </div>
+            <div id="trialPanel"></div>
+          </article>
+          <article class="panel mission-list">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-label">QUADRO DE MISSÕES</div>
+                <h2>MISSÕES AUXILIARES</h2>
+              </div><span id="missionCount" class="count-badge">0/3</span>
+            </div>
+            <div id="missions"></div>
+          </article>
+          <article class="panel log-panel">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-label">SISTEMA DE REGISTRO</div>
+                <h2>FLUXO DE EVENTOS</h2>
+              </div>
+            </div>
+            <div id="systemLog" class="system-log"></div>
+          </article>
+        </aside>
+      </section>
+    </section>
+
+    <section id="tab-status" class="tab-content">
+      <div class="dashboard-grid">
+        <article class="panel big-card">
+          <div class="panel-label">JANELA DE STATUS</div>
+          <div class="status-title">
+            <div class="status-icon">◎</div>
+            <div>
+              <h2 id="statusClass">E-RANK</h2>
+              <p>PERFIL DO JOGADOR // CONSTRUÇÃO DE TREINO</p>
+            </div>
+          </div>
+          <div class="detail-grid">
+            <div><span>NÍVEL</span><b id="detailLevel">1</b></div>
+            <div><span>XP</span><b id="detailXp">0</b></div>
+            <div><span>PONTOS DE ATRIBUTO</span><b id="detailPoints">0</b></div>
+            <div><span>TOTAL DE XP</span><b id="detailTotalXp">0</b></div>
+            <div><span>SEQUÊNCIA</span><b id="detailStreak">0</b></div>
+            <div><span>MISSÕES CONCLUÍDAS</span><b id="detailQuests">0</b></div>
+          </div>
+        </article>
+        <article class="panel big-card">
+          <div class="panel-label">ATRIBUTOS</div>
+          <div id="attributeList" class="attribute-list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="tab-quests" class="tab-content">
+      <article class="panel full-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="panel-label">ARQUIVO DE MISSÕES</div>
+            <h2>PROTOCOLOS ATIVOS</h2>
+          </div>
+        </div>
+        <div id="questArchive" class="quest-archive"></div>
+      </article>
+    </section>
+
+    <section id="tab-achievements" class="tab-content">
+      <article class="panel full-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="panel-label">SISTEMA DE CONQUISTAS</div>
+            <h2>DESBLOQUEADAS E OCULTAS</h2>
+          </div><span id="achievementCount" class="count-badge">0/11</span>
+        </div>
+        <div id="achievements" class="achievement-grid"></div>
+      </article>
+    </section>
+
+    <section id="tab-history" class="tab-content">
+      <div class="history-grid">
+        <article class="panel full-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-label">HISTÓRICO DE TREINO</div>
+              <h2>REGISTROS DA SESSÃO</h2>
+            </div>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </article>
+        <article class="panel full-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-label">CARGA SEMANAL</div>
+              <h2>ÚLTIMOS 7 DIAS</h2>
+            </div>
+          </div>
+          <div id="weekChart" class="week-chart"></div>
+        </article>
+      </div>
+    </section>
+
+    <footer>Frontend protótipo • GPS local • Leaflet/OpenStreetMap • progresso salvo neste navegador • inspirado em
+      Solo Leveling, sem uso de assets/identidade visual proprietária • API/backend entram na próxima etapa</footer>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="app.js"></script>
+  <script src="cloud.js"></script>
+</body>
+
+</html>
