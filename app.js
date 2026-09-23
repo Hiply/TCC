@@ -21,12 +21,144 @@ const DIFFICULTY = {
 };
 const REP_STEP = 10;
 
-/* Missões manuais (permanecem como "quests" auxiliares) */
-const MISSIONS = [
-  { id: 'session', name: 'SYSTEM ACTIVATION', desc: 'Finalize uma sessão de treino com GPS.', goal: 1, unit: 'sessão', xp: 100, kind: 'manual' },
-  { id: 'stretch', name: 'RECOVERY PROTOCOL', desc: 'Complete uma rotina curta de recuperação/alongamento.', goal: 1, unit: 'sessão', xp: 50, kind: 'manual' },
-  { id: 'water', name: 'HYDRATION CHECK', desc: 'Registre 2 litros de água hoje.', goal: 2, unit: 'L', xp: 60, kind: 'manual' }
-];
+/* Missões dinâmicas por dia — cada reset gera uma nova fila de objetivos. */
+function rankMissionScale() {
+  const idx = rankIndexForLevel(state.level);
+  return {
+    hydration: Number((0.7 + idx * 0.35).toFixed(2)),
+    study: 3 + idx * 2,
+    walk: Number((0.6 + idx * 0.45).toFixed(2)),
+    pushups: 12 + idx * 12,
+    situps: 15 + idx * 12,
+    squats: 18 + idx * 14,
+    stretch: 1 + Math.max(0, idx - 1),
+    focus: 20 + idx * 15
+  };
+}
+
+function generateDailyMissionPool() {
+  const scale = rankMissionScale();
+  const todaySeed = new Date().toISOString().slice(0, 10);
+  const base = [
+    {
+      id: `daily-water-${todaySeed}`,
+      name: 'Hidratação básica',
+      desc: 'Beba água suficiente para manter o corpo em plena função.',
+      goal: scale.hydration,
+      progress: 0,
+      unit: 'L',
+      xp: 90,
+      rewardPoints: 1,
+      step: 0.25,
+      kind: 'hydration',
+      category: 'saúde'
+    },
+    {
+      id: `daily-study-${todaySeed}`,
+      name: 'Leitura de fortalecimento mental',
+      desc: 'Leia páginas para elevar a inteligência e foco.',
+      goal: scale.study,
+      progress: 0,
+      unit: 'pág.',
+      xp: 100,
+      rewardPoints: 1,
+      step: 1,
+      kind: 'study',
+      category: 'inteligência'
+    },
+    {
+      id: `daily-pushups-${todaySeed}`,
+      name: 'Treino de força',
+      desc: 'Registre flexões para reforçar o corpo.',
+      goal: scale.pushups,
+      progress: 0,
+      unit: 'rep',
+      xp: 110,
+      rewardPoints: 1,
+      step: 10,
+      kind: 'pushups',
+      category: 'treino'
+    },
+    {
+      id: `daily-situps-${todaySeed}`,
+      name: 'Treino de core',
+      desc: 'Complete abdominais para aumentar resistência.',
+      goal: scale.situps,
+      progress: 0,
+      unit: 'rep',
+      xp: 110,
+      rewardPoints: 1,
+      step: 10,
+      kind: 'situps',
+      category: 'treino'
+    },
+    {
+      id: `daily-squats-${todaySeed}`,
+      name: 'Treino de pernas',
+      desc: 'Realize agachamentos para reforçar base e resistência.',
+      goal: scale.squats,
+      progress: 0,
+      unit: 'rep',
+      xp: 120,
+      rewardPoints: 2,
+      step: 10,
+      kind: 'squats',
+      category: 'treino'
+    },
+    {
+      id: `daily-walk-${todaySeed}`,
+      name: 'Caminhada funcional',
+      desc: 'Ande para melhorar condicionamento e energia.',
+      goal: scale.walk,
+      progress: 0,
+      unit: 'km',
+      xp: 105,
+      rewardPoints: 1,
+      step: 0.5,
+      kind: 'walk',
+      category: 'cardio'
+    }
+  ];
+
+  const rotated = [...base];
+  const shift = new Date(todaySeed).getUTCDate() % rotated.length;
+  for (let i = 0; i < shift; i++) rotated.push(rotated.shift());
+  return rotated.slice(0, 6);
+}
+
+function getMissionDeck() {
+  if (!Array.isArray(state.dailyMissions) || state.dailyMissions.length === 0) {
+    state.dailyMissions = generateDailyMissionPool();
+  }
+  return state.dailyMissions;
+}
+
+function advanceDailyMission(missionId, amount = 1) {
+  const mission = getMissionDeck().find(item => item.id === missionId);
+  if (!mission || mission.completed) return;
+
+  const nextProgress = Math.min(mission.goal, mission.progress + amount);
+  mission.progress = nextProgress;
+
+  if (nextProgress >= mission.goal) {
+    mission.completed = true;
+    state.completedQuestCount += 1;
+    state.statPoints += mission.rewardPoints || 1;
+    addXp(mission.xp || 50);
+    updateStreak();
+    checkAchievements();
+    showToast('MISSÃO CONCLUÍDA', `${mission.name} • +${mission.xp} XP • +${mission.rewardPoints} pontos`);
+    log(`${mission.name} concluída. +${mission.xp} XP e +${mission.rewardPoints} pontos.`, 'QUEST');
+  }
+
+  updateUI();
+}
+
+function resetDailyMissions() {
+  state.dailyMissions = generateDailyMissionPool();
+  state.completed = { ...state.completed, session: false, stretch: false, water: false };
+  state.missions = { session: 0, stretch: 0, water: 0 };
+}
 
 const ACHIEVEMENTS = [
   ['first-quest', '⚡', 'FIRST AWAKENING', 'Complete sua primeira missão.'],
@@ -41,6 +173,7 @@ const ACHIEVEMENTS = [
   ['gate-clear', '◈', 'CAÇADOR DE PORTAIS', 'Limpe seu primeiro portal.'],
   ['no-penalty-7', '✚', 'DISCIPLINA DE FERRO', 'Cumpra a quest diária 7 dias seguidos sem penalidade.']
 ];
+const MISSIONS = [];
 
 const defaultState = () => ({
   level: 1, xp: 0, totalXp: 0, statPoints: 0,
@@ -53,6 +186,7 @@ const defaultState = () => ({
   history: [], week: {},
   settings: { sound: true, difficulty: 'anime' },
   daily: { date: null, pushups: 0, situps: 0, squats: 0, runKm: 0, allComplete: false },
+  dailyMissions: [],
   penalty: { active: false, progress: 0, target: 50 },
   cleanStreak: 0,
   trial: { active: false, rankIdx: 0, distGoal: 0, distProgress: 0, repsGoal: 0, repsProgress: 0 },
@@ -75,6 +209,7 @@ function normalize(s) {
   s.week = s.week || {};
   s.settings = { ...d.settings, ...(s.settings || {}) };
   s.daily = { ...d.daily, ...(s.daily || {}) };
+  s.dailyMissions = Array.isArray(s.dailyMissions) ? s.dailyMissions : [];
   s.penalty = { ...d.penalty, ...(s.penalty || {}) };
   s.trial = { ...d.trial, ...(s.trial || {}) };
   s.queuedXp = s.queuedXp || 0;
@@ -188,7 +323,12 @@ function completeTrial() {
 /* ---------- Daily System Quest + Penalidade ---------- */
 function ensureDailyReset() {
   const t = today();
-  if (state.daily.date === t) return;
+  if (state.daily.date === t) {
+    if (!Array.isArray(state.dailyMissions) || state.dailyMissions.length === 0) {
+      state.dailyMissions = generateDailyMissionPool();
+    }
+    return;
+  }
   if (state.daily.date) {
     if (!state.daily.allComplete) {
       state.penalty.active = true; state.penalty.progress = 0;
@@ -200,6 +340,7 @@ function ensureDailyReset() {
     }
   }
   state.daily = { date: t, pushups: 0, situps: 0, squats: 0, runKm: 0, allComplete: false };
+  state.dailyMissions = generateDailyMissionPool();
   save();
 }
 function dailyGoalsMet() {
@@ -241,6 +382,22 @@ function payPenalty() {
 
 /* ---------- Missões manuais ---------- */
 function completeMission(id) {
+  const mission = getMissionDeck().find(x => x.id === id);
+  if (mission) {
+    if (mission.completed) return;
+    mission.progress = mission.goal;
+    mission.completed = true;
+    state.completedQuestCount += 1;
+    state.statPoints += mission.rewardPoints || 1;
+    addXp(mission.xp || 50);
+    updateStreak();
+    checkAchievements();
+    showToast('MISSÃO CONCLUÍDA', `${mission.name} • +${mission.xp} XP • +${mission.rewardPoints} pontos`);
+    log(`${mission.name} concluída. +${mission.xp} XP e +${mission.rewardPoints} pontos.`, 'QUEST');
+    updateUI();
+    return;
+  }
+
   if (state.completed[id]) return;
   const m = MISSIONS.find(x => x.id === id); if (!m) return;
   state.completed[id] = true; state.missions[id] = m.goal; state.completedQuestCount++;
@@ -250,6 +407,12 @@ function completeMission(id) {
   updateUI();
 }
 function manualComplete(id) {
+  const mission = getMissionDeck().find(x => x.id === id);
+  if (mission) {
+    advanceDailyMission(id, mission.goal - mission.progress);
+    return;
+  }
+
   const m = MISSIONS.find(x => x.id === id);
   if (!m || m.kind !== 'manual' || state.completed[id]) return;
   completeMission(id);
@@ -405,16 +568,20 @@ function renderRankLadder() {
 
 function renderMissions() {
   const c = $('#missions'); if (!c) return;
+  const missions = getMissionDeck();
   c.innerHTML = ''; let done = 0;
-  MISSIONS.forEach(m => {
-    const v = state.missions[m.id] || 0, d = !!state.completed[m.id]; if (d) done++;
-    const p = Math.min(100, v / m.goal * 100);
+  missions.forEach(m => {
+    const d = !!m.completed;
+    if (d) done++;
+    const progress = Number(m.progress || 0);
+    const p = Math.min(100, (progress / m.goal) * 100);
     const e = document.createElement('div'); e.className = 'mission-item' + (d ? ' complete' : ''); e.dataset.id = m.id;
-    e.innerHTML = `<div class="mission-item-top"><div class="mission-name">${d ? '✓ ' : ''}${m.name}</div><div class="mission-xp">+${m.xp} XP</div></div><p>${m.desc}</p><div class="mini-progress"><span style="width:${p}%"></span></div><div class="mission-item-bottom"><span>${m.unit === 'km' ? v.toFixed(2) : v} / ${m.goal} ${m.unit}</span><span>${d ? 'COMPLETE' : 'ACTIVE'}</span></div>${d ? '' : `<button class="primary-btn mission-complete-btn" data-complete="${m.id}">✓ MARCAR COMO CONCLUÍDA</button>`}`;
+    const progressLabel = m.unit === 'km' || m.unit === 'L' ? progress.toFixed(2) : progress;
+    e.innerHTML = `<div class="mission-item-top"><div class="mission-name">${d ? '✓ ' : ''}${m.name}</div><div class="mission-xp">+${m.xp} XP</div></div><p>${m.desc}</p><div class="mini-progress"><span style="width:${p}%"></span></div><div class="mission-item-bottom"><span>${progressLabel} / ${m.goal} ${m.unit}</span><span>${d ? 'COMPLETE' : 'ACTIVE'}</span></div>${d ? '' : `<button class="primary-btn mission-complete-btn" data-complete="${m.id}">✓ REGISTRAR PROGRESSO</button>`}`;
     c.appendChild(e);
   });
-  c.querySelectorAll('[data-complete]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); manualComplete(b.dataset.complete); }));
-  const missionCount = $('#missionCount'); if (missionCount) missionCount.textContent = `${done}/${MISSIONS.length}`;
+  c.querySelectorAll('[data-complete]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); const mission = missions.find(item => item.id === b.dataset.complete); if (mission) advanceDailyMission(mission.id, mission.step || 1); }));
+  const missionCount = $('#missionCount'); if (missionCount) missionCount.textContent = `${done}/${missions.length}`;
   const b = $('#startBtn');
   if (b) {
     b.textContent = watchId === null ? 'COMEÇAR MONITORAMENTO' : 'RASTREANDO…';
@@ -426,17 +593,19 @@ function renderMissions() {
 function renderQuests() {
   const c = $('#questArchive'); if (!c) return;
   c.innerHTML = '';
-  MISSIONS.forEach(m => {
-    const v = state.missions[m.id] || 0; const d = state.completed[m.id];
+  const missions = getMissionDeck();
+  missions.forEach(m => {
+    const progress = Number(m.progress || 0);
+    const d = !!m.completed;
     const e = document.createElement('div'); e.className = 'archive-card';
-    e.innerHTML = `<h3>${m.name}</h3><p>${m.desc}</p><div class="archive-row"><span>PROGRESSO</span><b>${m.unit === 'km' ? v.toFixed(2) : v}/${m.goal}</b></div><div class="archive-row"><span>RECOMPENSA</span><b>+${m.xp} XP</b></div><div class="archive-row"><span>STATUS</span><b>${d ? 'COMPLETE' : 'ACTIVE'}</b></div>${d ? '' : `<button class="primary-btn mission-complete-btn" data-complete2="${m.id}">✓ MARCAR COMO CONCLUÍDA</button>`}`;
+    e.innerHTML = `<h3>${m.name}</h3><p>${m.desc}</p><div class="archive-row"><span>PROGRESSO</span><b>${m.unit === 'km' || m.unit === 'L' ? progress.toFixed(2) : progress}/${m.goal}</b></div><div class="archive-row"><span>RECOMPENSA</span><b>+${m.xp} XP • +${m.rewardPoints || 1} PTS</b></div><div class="archive-row"><span>STATUS</span><b>${d ? 'COMPLETE' : 'ACTIVE'}</b></div>${d ? '' : `<button class="primary-btn mission-complete-btn" data-complete2="${m.id}">✓ REGISTRAR PROGRESSO</button>`}`;
     c.appendChild(e);
   });
   const tg = targets();
   const e2 = document.createElement('div'); e2.className = 'archive-card';
   e2.innerHTML = `<h3>QUEST DIÁRIA DO SISTEMA</h3><p>Flexões, abdominais, agachamentos e corrida — a quest original do Sistema. Falhar gera penalidade.</p><div class="archive-row"><span>META</span><b>${tg.pushups}/${tg.situps}/${tg.squats}/${tg.runKm}km</b></div><div class="archive-row"><span>STATUS</span><b>${state.daily.allComplete ? 'COMPLETE' : 'ACTIVE'}</b></div><div id="dailyQuestArchive"></div>`;
   c.prepend(e2);
-  c.querySelectorAll('[data-complete2]').forEach(b => b.addEventListener('click', () => manualComplete(b.dataset.complete2)));
+  c.querySelectorAll('[data-complete2]').forEach(b => b.addEventListener('click', () => { const mission = missions.find(item => item.id === b.dataset.complete2); if (mission) advanceDailyMission(mission.id, mission.step || 1); }));
   const rows = [
     ['pushups', 'FLEXÕES', state.daily.pushups, tg.pushups],
     ['situps', 'ABDOMINAIS', state.daily.situps, tg.situps],
